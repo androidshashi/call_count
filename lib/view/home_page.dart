@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:call_count/api/web_service.dart';
 import 'package:disable_battery_optimization/disable_battery_optimization.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -19,20 +20,17 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int _counter = 0;
-  late SharedPreferences prefs;
+  SharedPreferences? prefs;
   String _lastCallAt = "No call received";
+  String _lastCallAtTime = " NA";
+  List<String> logDetails =[];
 
   @override
   void initState() {
-    if(Platform.isIOS)
-      {
-        Fluttertoast.showToast(
-            msg: "Inside init state",
-        );
-        setStream();
-      }
-    if(Platform.isAndroid)
-    {
+    if (Platform.isIOS) {
+      setStream();
+    }
+    if (Platform.isAndroid) {
       askForPhoneStatePermission();
     }
 
@@ -64,14 +62,14 @@ class _HomePageState extends State<HomePage> {
 
   ///Start phone call state
   Future<void> setStream() async {
-    Fluttertoast.showToast(
-      msg: "Inside setStream",
-    );
     prefs = await SharedPreferences.getInstance();
     setState(() {
-      _counter = prefs.getInt("call_counter") ?? 0;
+      logDetails = prefs?.getStringList('log')??[];
+      _counter = prefs?.getInt("call_counter") ?? 0;
       _lastCallAt =
-          prefs.getString("last_call_at") ?? "No calls received till now";
+          prefs?.getString(WebService.LAST_CALL_DATE) ?? "NA";
+      _lastCallAtTime =
+          prefs?.getString(WebService.LAST_CALL_TIME) ?? "NA";
     });
 
     debugPrint(
@@ -80,20 +78,23 @@ class _HomePageState extends State<HomePage> {
       if (event != null) {
         if (event == PhoneStateStatus.CALL_STARTED) {
           //call counter
-          int counter = prefs.getInt("call_counter") ?? 0;
+          int counter = prefs?.getInt("call_counter") ?? 0;
           counter++;
-          prefs.setInt("call_counter", counter);
+          prefs?.setInt("call_counter", counter);
 
           //last call time
           var now = DateTime.now();
-          String formattedDate = DateFormat('yyyy-MM-dd – kk:mm').format(now);
-          prefs.setString("last_call_at", formattedDate);
+          String formattedDate = DateFormat('yyyy-MM-dd').format(now);
+          String formattedTime = DateFormat('HH:mm:ss').format(now);
+          prefs?.setString(WebService.LAST_CALL_DATE, formattedDate);
+          prefs?.setString(WebService.LAST_CALL_TIME, formattedTime);
 
           setState(() {
             _counter = counter;
             _lastCallAt = formattedDate;
+            _lastCallAtTime = formattedTime;
             debugPrint(
-                "----------Counter:$_counter, Last call at:$_lastCallAt----------");
+                "Frontend Counter:$_counter, Last call at:$_lastCallAt Time:$_lastCallAtTime----------");
           });
         }
       }
@@ -122,15 +123,20 @@ class _HomePageState extends State<HomePage> {
               style: Theme.of(context).textTheme.headlineMedium,
             ),
             Text(
-              "You received last call at:$_lastCallAt",
+              "Date:$_lastCallAt,\nTime:$_lastCallAtTime",
             ),
             ...Platform.isAndroid ? (_batteryOptimizationLayout()) : [],
+            const SizedBox(
+              height: 10,
+            ),
+            _showLogs(),
           ],
         ),
       ),
     );
   }
 
+  ///battery optimization
   List<Widget> _batteryOptimizationLayout() {
     return [
       const SizedBox(
@@ -153,5 +159,19 @@ class _HomePageState extends State<HomePage> {
                     "Follow the steps and disable the optimizations to allow smooth functioning of this app");
           }),
     ];
+  }
+
+  ///Show logs
+  Widget _showLogs() {
+      return Container(
+        height: 300,
+        margin: const EdgeInsets.all(20),
+        width: double.infinity,
+        child: ListView.builder(
+          itemCount: logDetails.length,
+          itemBuilder: (context, index) => Text(logDetails[index]),
+        ),
+      );
+
   }
 }

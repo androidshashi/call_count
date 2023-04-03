@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
-
 import 'package:call_count/api/web_service.dart';
 import 'package:call_count/view/home_page.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -9,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_background_service_android/flutter_background_service_android.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:intl/intl.dart';
 import 'package:phone_state/phone_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -36,7 +36,7 @@ Future<void> initializeService() async {
     requestAlertPermission: false,
     requestBadgePermission: false,
     requestSoundPermission: false,
-    //   notificationCategories: darwinNotificationCategories,
+    // notificationCategories: darwinNotificationCategories,
   );
 
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
@@ -80,7 +80,7 @@ Future<void> initializeService() async {
       onBackground: onIosBackground,
     ),
   );
-
+  //
   service.startService();
 }
 
@@ -89,25 +89,18 @@ Future<bool> onIosBackground(ServiceInstance service) async {
   WidgetsFlutterBinding.ensureInitialized();
   DartPluginRegistrant.ensureInitialized();
 
-  SharedPreferences preferences = await SharedPreferences.getInstance();
-  await preferences.reload();
-  final log = preferences.getStringList('log') ?? <String>[];
-  log.add(DateTime.now().toIso8601String());
-  await preferences.setStringList('log', log);
+  listenForCalls();
 
   return true;
 }
 
-@pragma('vm:entry-point')
-void onStart(ServiceInstance service) async {
-  // Only available for flutter 3.0.0 and later
-  DartPluginRegistrant.ensureInitialized();
-
+/**
+ * Listen for calls
+ */
+void listenForCalls() {
   // For flutter prior to version 3.0.0
   // We have to register the plugin manually
 
-  SharedPreferences preferences = await SharedPreferences.getInstance();
-  await preferences.setString("hello", "world");
   int counter = 0;
   PhoneState.phoneStateStream.listen((event) async {
     if (event != null) {
@@ -116,17 +109,32 @@ void onStart(ServiceInstance service) async {
         counter = prefs.getInt("call_counter") ?? 0;
         counter++;
         prefs.setInt("call_counter", counter);
-        //send counter to server
-        WebService.send();
+
         //last call time
         var now = DateTime.now();
-        String formattedDate = DateFormat('yyyy-MM-dd – kk:mm').format(now);
-        prefs.setString("last_call_at", formattedDate);
+        String formattedDate = DateFormat('yyyy-MM-dd').format(now);
+        String formattedTime = DateFormat('HH:mm:ss').format(now);
+        prefs.setString(WebService.LAST_CALL_DATE, formattedDate);
+        prefs.setString(WebService.LAST_CALL_TIME, formattedTime);
+
+        //send counter to server
+        WebService.send();
+
         //
-        debugPrint("----------Counter:$counter, Last call at:$formattedDate----------");
+        debugPrint(
+            "----Backend, Counter:$counter, Last call Date:$formattedDate, Last call Time:$formattedTime----------");
       }
     }
   });
+}
+
+@pragma('vm:entry-point')
+void onStart(ServiceInstance service) async {
+  // Only available for flutter 3.0.0 and later
+  DartPluginRegistrant.ensureInitialized();
+
+  //listen for calls
+  listenForCalls();
 
   /// OPTIONAL when use custom notification
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
@@ -155,7 +163,7 @@ void onStart(ServiceInstance service) async {
         flutterLocalNotificationsPlugin.show(
           888,
           'CALL TRACKER',
-          'CALL ANSWERED:$counter',
+          'CALL ANSWERED',
           const NotificationDetails(
             android: AndroidNotificationDetails(
               'my_foreground',
